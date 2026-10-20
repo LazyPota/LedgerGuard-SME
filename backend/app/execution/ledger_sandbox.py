@@ -91,7 +91,7 @@ CREATE INDEX IF NOT EXISTS idx_invoices_tenant ON invoice_states(tenant_id, stat
 class LedgerSandbox:
     def __init__(self, path: str | Path) -> None:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(path), timeout=20.0, isolation_level=None)
+        self._conn = sqlite3.connect(str(path), timeout=20.0, isolation_level=None, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
@@ -123,6 +123,12 @@ class LedgerSandbox:
             "SELECT * FROM executions WHERE idempotency_key = ?", (idempotency_key,)
         ).fetchone()
         return None if row is None else self._to_receipt(row, replay=True)
+
+    def list_executions(self, tenant_id: str) -> list[ExecutionReceipt]:
+        rows = self._conn.execute(
+            "SELECT * FROM executions WHERE tenant_id = ? ORDER BY seq", (tenant_id,)
+        ).fetchall()
+        return [self._to_receipt(row, replay=False) for row in rows]
 
     # -- seeds -------------------------------------------------------------
     def initialize(self, cash: Decimal, tenant_id: str = "sme_01") -> None:
