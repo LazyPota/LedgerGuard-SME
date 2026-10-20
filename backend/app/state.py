@@ -173,7 +173,7 @@ class AppState:
 
         status = match.reconciliation_findings.overall_match_status
         if duplicate.blocked:
-            risk_flags.append("DUPLICATE_CANONICAL_ID")
+            risk_flags.append(duplicate.code)
             status = "BLOCKED_DUPLICATE"
 
         liquidity = evaluate_liquidity(
