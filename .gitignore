@@ -8,6 +8,11 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
+# Frontend / Node
+node_modules/
+dist/
+*.local
+
 # Secrets / local state
 .env
 *.db
