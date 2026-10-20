@@ -15,6 +15,9 @@ import { OverviewDashboardView } from './components/views/OverviewDashboardView'
 import { InvoiceIntakeListView } from './components/views/InvoiceIntakeListView';
 import { InvoiceDetailDrawer } from './components/views/InvoiceDetailDrawer';
 import { ThreeWayMatchMatrixView } from './components/views/ThreeWayMatchMatrixView';
+import { DiscrepancyReviewView } from './components/views/DiscrepancyReviewView';
+import { LiquidityExplanationView } from './components/views/LiquidityExplanationView';
+import { ApprovalQueueView } from './components/views/ApprovalQueueView';
 import { ShieldCheck, ArrowRight } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -239,20 +242,47 @@ export const App: React.FC = () => {
             />
           )}
 
-          {/* Placeholder Views for Stages 5 and 6 */}
+          {activeView === 'discrepancy' && (
+            <DiscrepancyReviewView
+              invoices={invoices}
+              onRefreshData={loadData}
+              onNavigateTo3WayMatch={handleNavigateTo3WayMatch}
+            />
+          )}
+
+          {activeView === 'liquidity' && (
+            <LiquidityExplanationView
+              treasury={treasury}
+              invoices={invoices}
+              onNavigateToApproval={handleNavigateToApproval}
+            />
+          )}
+
+          {activeView === 'approval' && (
+            <ApprovalQueueView
+              invoices={invoices}
+              onRefreshData={loadData}
+              onNavigateTo3WayMatch={handleNavigateTo3WayMatch}
+            />
+          )}
+
+          {/* Placeholder Views for Stage 6 */}
           {activeView !== 'overview' &&
             activeView !== 'intake' &&
-            activeView !== 'three_way_match' && (
+            activeView !== 'three_way_match' &&
+            activeView !== 'discrepancy' &&
+            activeView !== 'liquidity' &&
+            activeView !== 'approval' && (
               <Card
-                title={`Stage 5/6 View: ${activeView.toUpperCase()}`}
-                subtitle="Scheduled for complete feature implementation in Stages 5 and 6"
+                title={`Stage 6 View: ${activeView.toUpperCase()}`}
+                subtitle="Scheduled for final implementation in Stage 6"
               >
                 <div className="p-8 text-center space-y-3 font-mono text-xs text-slate-400">
                   <p>
-                    Component view scheduled for implementation: <strong>{activeView}</strong>.
+                    Component view scheduled for Stage 6: <strong>{activeView}</strong>.
                   </p>
                   <p className="text-[11px] text-slate-500 font-sans">
-                    Stage 4 successfully delivers View 1 (Overview Dashboard), View 2 (Invoice Intake), and View 3 (Three-Way Match Matrix).
+                    Stage 5 successfully delivers View 4 (Discrepancy Review), View 5 (Liquidity Explanation), and View 6 (Approval Controls).
                   </p>
                   <div className="pt-2">
                     <button
@@ -271,8 +301,8 @@ export const App: React.FC = () => {
           <div className="p-4 rounded-lg bg-slate-900 border border-slate-800 flex items-start gap-3 text-xs text-slate-400">
             <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
             <div>
-              <span className="font-semibold text-slate-200">Stage 4 Dashboard & Matching Active. </span>
-              Zero Frontend Financial Arithmetic strictly applied. Tabular-nums formatted. OWASP ASI01 sandboxed field containers and anti-rubber-stamp confirmation gates established.
+              <span className="font-semibold text-slate-200">Stage 5 Risk Review & Approval Controls Active. </span>
+              Zero Frontend Financial Arithmetic strictly applied. Tabular-nums formatted. OWASP ASI01 sandboxed field containers and anti-rubber-stamp confirmation gates enforced.
             </div>
           </div>
         </main>
