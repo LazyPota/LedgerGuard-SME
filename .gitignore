@@ -1,0 +1,14 @@
+# Agent skills (local only, not shared via repo)
+.agents/skills/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Secrets / local state
+.env
+*.db
+*.sqlite3
