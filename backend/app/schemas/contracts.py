@@ -239,3 +239,137 @@ class ThreeWayMatchRecord(ApiModel):
     vendor_master_check: VendorMasterCheck
     reconciliation_findings: ReconciliationFindings
 
+
+# --- Treasury / working-capital contracts ---------------------------------
+
+
+class DailyCashPoint(ApiModel):
+    day_index: int = Field(ge=1)
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    baseline_cash: Decimal
+    optimized_cash: Decimal
+    payroll_floor: Decimal
+    inflows: Decimal
+    outflows: Decimal
+    credit_draw: Decimal
+    credit_balance: Decimal
+    event_label: str | None = None
+
+    _money = field_validator(
+        "baseline_cash",
+        "optimized_cash",
+        "payroll_floor",
+        "inflows",
+        "outflows",
+        "credit_draw",
+        "credit_balance",
+        mode="before",
+    )(staticmethod(to_money))
+
+
+class CreditFacilityRecord(ApiModel):
+    facility_id: str
+    name: str
+    facility_type: Literal["REVOLVING_LOC", "DYNAMIC_DISCOUNTING_SCF", "SHORT_TERM_LOAN"]
+    credit_limit: Decimal
+    available_capacity: Decimal
+    apr_pct: Decimal
+    drawdown_fee_pct: Decimal
+    covenant_current_ratio_min: Decimal
+    current_ratio_actual: Decimal
+    covenant_compliant: bool
+    recommended_by_optimizer: bool = False
+    covenant_dscr_min: Decimal | None = None
+    dscr_actual: Decimal | None = None
+
+    _money = field_validator(
+        "credit_limit", "available_capacity", mode="before"
+    )(staticmethod(to_money))
+    _rates = field_validator(
+        "apr_pct",
+        "drawdown_fee_pct",
+        "covenant_current_ratio_min",
+        "current_ratio_actual",
+        "covenant_dscr_min",
+        "dscr_actual",
+        mode="before",
+    )(staticmethod(to_rate))
+
+
+class TreasurySummaryResponse(ApiModel):
+    currency: CurrencyCode
+    current_cash_balance: Decimal
+    payroll_reserve_floor: Decimal
+    next_payroll_date: str
+    next_payroll_amount: Decimal
+    min_projected_30d_cash_baseline: Decimal
+    min_projected_30d_cash_optimized: Decimal
+    total_verified_payables_30d: Decimal
+    total_quarantined_payables: Decimal
+    net_30d_discount_savings_available: Decimal
+    daily_cash_trajectory: list[DailyCashPoint]
+    credit_facilities: list[CreditFacilityRecord]
+
+    _money = field_validator(
+        "current_cash_balance",
+        "payroll_reserve_floor",
+        "next_payroll_amount",
+        "min_projected_30d_cash_baseline",
+        "min_projected_30d_cash_optimized",
+        "total_verified_payables_30d",
+        "total_quarantined_payables",
+        "net_30d_discount_savings_available",
+        mode="before",
+    )(staticmethod(to_money))
+
+
+Strategy = Literal[
+    "CAPTURE_EARLY_DISCOUNT_SELF_FUNDED",
+    "CAPTURE_EARLY_DISCOUNT_WITH_CREDIT_BRIDGE",
+    "DEFER_TO_NET_DUE_DATE",
+    "HOLD_QUARANTINED",
+]
+
+
+class LiquidityDecisionRecord(ApiModel):
+    recommended_strategy: Strategy
+    nominal_invoice_amount: Decimal
+    discounted_payment_amount: Decimal
+    gross_discount_amount: Decimal
+    discount_effective_apr_pct: Decimal
+    discount_effective_ear_pct: Decimal
+    selected_payment_date: str
+    requires_credit_bridge: bool
+    matched_credit_facility_id: str | None
+    bridge_draw_amount: Decimal
+    bridge_duration_days: int
+    bridge_interest_and_fee_cost: Decimal
+    net_economic_benefit: Decimal
+    post_action_min_30d_cash: Decimal
+    respects_payroll_floor: bool
+    deterministic_rationale: str
+
+    _money = field_validator(
+        "nominal_invoice_amount",
+        "discounted_payment_amount",
+        "gross_discount_amount",
+        "discount_effective_apr_pct",
+        "discount_effective_ear_pct",
+        "bridge_draw_amount",
+        "bridge_interest_and_fee_cost",
+        "net_economic_benefit",
+        "post_action_min_30d_cash",
+        mode="before",
+    )(staticmethod(to_money))
+
+
+class StagedPaymentPlan(ApiModel):
+    invoice_id: str
+    payment_date: str
+    amount: Decimal
+    strategy: Strategy
+    matched_credit_facility_id: str | None = None
+    requires_human_approval: bool
+
+    _amount = field_validator("amount", mode="before")(staticmethod(to_money))
+
