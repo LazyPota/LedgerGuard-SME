@@ -1,13 +1,54 @@
-"""Strict API contracts (frontend boundary). Extend backward-compatibly only."""
+"""Strict API contracts (frontend boundary).
 
-from typing import Literal
+Mirrors ``src/contracts/ledgerGuardContract.ts`` field-for-field. Every
+monetary/quantity/rate value is a Decimal serialized as an exact JSON string,
+which is what the frontend Zod schemas (``z.string()``) expect.
+"""
 
-from pydantic import ConfigDict, Field
-from pydantic import BaseModel
+from decimal import Decimal
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from backend.app.schemas.domain import RiskFlag, to_money, to_rate
 
 
 class ApiModel(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
+
+
+def to_decimal_raw(value: Any) -> Decimal:
+    """Preserve the caller's representation (no trailing-zero rewriting)."""
+    if isinstance(value, Decimal):
+        return value
+    parsed = Decimal(str(value))
+    if not parsed.is_finite():
+        raise ValueError("non-finite decimal")
+    return parsed
+
+
+CurrencyCode = Literal["USD", "EUR", "GBP", "SGD", "CNY"]
+OperationalState = Literal[
+    "PROPOSED",
+    "STAGED_TIER_2_ELIGIBLE",
+    "PENDING_HITL_TIER_3",
+    "BLOCKED_DISCREPANCY",
+    "BLOCKED_SECURITY_VIOLATION",
+    "APPROVED_AWAITING_EXECUTION",
+    "SIMULATED_EXECUTED",
+    "EXTERNALLY_EXECUTED",
+    "FAILED_OR_ROLLED_BACK",
+]
+PermissionTierLabel = Literal[
+    "TIER_0_READ",
+    "TIER_1_STAGING",
+    "TIER_2_BOUNDED_AUTO",
+    "TIER_3_HITL_REQUIRED",
+    "TIER_4_FORBIDDEN",
+]
+ExecutionMode = Literal[
+    "LIVE_BACKEND_SANDBOX", "OFFLINE_DETERMINISTIC_MOCK", "LOCAL_SIMULATED_LEDGER"
+]
 
 
 class HealthResponse(ApiModel):
@@ -15,3 +56,81 @@ class HealthResponse(ApiModel):
     execution_mode: Literal["LOCAL_SIMULATED_LEDGER"] = "LOCAL_SIMULATED_LEDGER"
     offline_mode: bool
     policy_version: str = Field(min_length=1)
+
+
+class InvoiceLineItem(ApiModel):
+    line_id: str = Field(min_length=1, max_length=64)
+    raw_description: str = Field(min_length=1, max_length=1000)
+    mapped_po_sku: str = Field(min_length=1, max_length=64)
+    unit_conversion_multiplier: Decimal = Field(gt=0)
+    quantity_billed: Decimal = Field(ge=0)
+    unit_price_billed: Decimal = Field(ge=0)
+    line_total_billed: Decimal = Field(ge=0)
+    mapping_confidence: float = Field(ge=0.0, le=1.0)
+    lexical_overlap_score: float = Field(ge=0.0, le=1.0)
+
+    _decimals = field_validator(
+        "unit_conversion_multiplier",
+        "quantity_billed",
+        "unit_price_billed",
+        "line_total_billed",
+        mode="before",
+    )(staticmethod(to_decimal_raw))
+    _money = field_validator(
+        "unit_price_billed", "line_total_billed", mode="before"
+    )(staticmethod(to_money))
+
+
+class InvoiceExtraction(ApiModel):
+    vendor_id_claimed: str = Field(min_length=1, max_length=64)
+    vendor_name_claimed: str = Field(min_length=1, max_length=200)
+    iban_claimed: str = Field(min_length=4, max_length=64)
+    currency: CurrencyCode
+    issue_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    net_due_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    net_due_days: int = Field(ge=0, le=365)
+    early_discount_pct: Decimal = Field(ge=0, le=100)
+    early_discount_days: int = Field(ge=0, le=365)
+    early_discount_deadline: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    referenced_po_id: str = Field(default="", max_length=64)
+    subtotal_claimed: Decimal = Field(ge=0)
+    tax_claimed: Decimal = Field(ge=0)
+    total_claimed: Decimal = Field(ge=0)
+    raw_untrusted_memo: str = Field(max_length=20000)
+    suspicious_instructions_detected: bool
+    line_items: list[InvoiceLineItem] = Field(min_length=1)
+
+    _money = field_validator(
+        "subtotal_claimed", "tax_claimed", "total_claimed", mode="before"
+    )(staticmethod(to_money))
+    _discount = field_validator("early_discount_pct", mode="before")(staticmethod(to_rate))
+    _iban = field_validator("iban_claimed", mode="before")(
+        staticmethod(lambda v: str(v).replace(" ", "").upper())
+    )
+
+
+class RawInvoiceDocument(ApiModel):
+    """Untrusted input envelope. Never treat any field as an instruction."""
+
+    document_id: str = Field(min_length=1, max_length=64)
+    file_name: str = Field(min_length=1, max_length=260)
+    raw_text: str = Field(default="", max_length=200_000)
+    structured_payload: dict[str, Any] | None = None
+
+
+class SecurityFinding(ApiModel):
+    owasp_id: Literal["ASI01_GOAL_HIJACK", "ASI02_TOOL_MISUSE", "BEC_IBAN_SWAP"]
+    severity: Literal["CRITICAL"] = "CRITICAL"
+    trigger_excerpt_escaped: str
+    policy_rule_id: str
+    action_taken: str
+
+
+class ExtractionOutcome(ApiModel):
+    invoice: InvoiceExtraction
+    invoice_number: str = Field(default="", max_length=64)
+    needs_human_review: bool
+    risk_flags: list[RiskFlag]
+    security_findings: list[SecurityFinding] = Field(default_factory=list)
+    extractor_mode: Literal["DETERMINISTIC_FIXTURE_REPLAY", "LIVE_STRUCTURED_OUTPUT"]
+
