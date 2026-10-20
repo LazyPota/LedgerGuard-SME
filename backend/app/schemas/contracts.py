@@ -373,3 +373,70 @@ class StagedPaymentPlan(ApiModel):
 
     _amount = field_validator("amount", mode="before")(staticmethod(to_money))
 
+
+# --- Approval & execution contracts ---------------------------------------
+
+
+class SubmitApprovalDecisionRequest(ApiModel):
+    approval_id: str
+    invoice_id: str
+    decision: Literal["APPROVE_EXECUTION", "REJECT_AND_QUARANTINE", "ESCALATE_VENDOR_DISPUTE"]
+    approver_id: str
+    approver_role: Literal["FINANCE_MANAGER", "TREASURY_CONTROLLER"]
+    confirmed_total_amount: Decimal
+    confirmed_iban_tail: str = Field(min_length=4, max_length=4)
+    reviewer_notes: str = ""
+    idempotency_key: str
+
+    _amount = field_validator("confirmed_total_amount", mode="before")(staticmethod(to_money))
+
+
+class ApprovalDecisionResponse(ApiModel):
+    action_id: str
+    approval_status: Literal["APPROVED", "REJECTED", "ESCALATED"]
+    approval_token: str | None = None
+    timestamp_utc: str
+
+
+class TriggerAutoExecutionRequest(ApiModel):
+    invoice_id: str
+    idempotency_key: str
+    operator_id: str
+
+
+class ExecutionReceipt(ApiModel):
+    execution_id: str
+    credit_draw_execution_id: str | None
+    execution_environment: Literal["SANDBOX_SIMULATION"] = "SANDBOX_SIMULATION"
+    invoice_id: str
+    status: Literal["SIMULATED_EXECUTED", "IDEMPOTENT_REPLAY_NOOP", "FAILED_ROLLED_BACK"]
+    idempotency_key: str
+    pre_execution_cash_balance: Decimal
+    disbursed_amount: Decimal
+    credit_drawn_amount: Decimal
+    post_execution_cash_balance: Decimal
+    post_state_invariant_verified: bool
+    executed_at_utc: str
+    decision_envelope_trace_id: str
+    failure_reason: str | None = None
+
+    _money = field_validator(
+        "pre_execution_cash_balance",
+        "disbursed_amount",
+        "credit_drawn_amount",
+        "post_execution_cash_balance",
+        mode="before",
+    )(staticmethod(to_money))
+
+
+class PolicyDecision(ApiModel):
+    tier: PermissionTierLabel
+    verdict: Literal[
+        "ALLOW",
+        "ALLOW_WITH_VALID_HUMAN_SIGNATURE",
+        "DENY_SECURITY_POLICY",
+        "DENY_DISCREPANCY",
+    ]
+    requires_hitl: bool
+    reasons: list[str] = Field(default_factory=list)
+

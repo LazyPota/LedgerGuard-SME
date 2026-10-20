@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     database_path: str = "ledgerguard.db"
     audit_log_path: str = "evidence/forensic_audit_log.jsonl"
 
+    # HMAC key for Tier 3 approvals. MUST be overridden in any shared deployment.
+    approval_signing_secret: str = "dev-only-change-me"
+
 
 @lru_cache
 def get_settings() -> Settings:
