@@ -56,6 +56,20 @@ class HealthResponse(ApiModel):
     execution_mode: Literal["LOCAL_SIMULATED_LEDGER"] = "LOCAL_SIMULATED_LEDGER"
     offline_mode: bool
     policy_version: str = Field(min_length=1)
+    llm_extractor_mode: Literal["DETERMINISTIC_FIXTURE_REPLAY", "LIVE_STRUCTURED_OUTPUT"] = (
+        "DETERMINISTIC_FIXTURE_REPLAY"
+    )
+    database_connected: bool = True
+    audit_chain_valid: bool = True
+    as_of_timestamp_utc: str | None = None
+
+
+class ExecuteRequest(ApiModel):
+    invoice_id: str | None = None
+    action_id: str | None = None
+    idempotency_key: str = Field(min_length=8, max_length=128)
+    approval_token: str | None = None
+    operator_id: str = ""
 
 
 class InvoiceLineItem(ApiModel):
@@ -439,4 +453,96 @@ class PolicyDecision(ApiModel):
     ]
     requires_hitl: bool
     reasons: list[str] = Field(default_factory=list)
+
+
+class InvoiceRecord(ApiModel):
+    invoice_id: str
+    invoice_number: str
+    document_sha256: str
+    operational_state: OperationalState
+    permission_tier: PermissionTierLabel
+    extraction: InvoiceExtraction
+    three_way_match: ThreeWayMatchRecord
+    liquidity_decision: LiquidityDecisionRecord
+
+
+class IngestInvoiceRequest(ApiModel):
+    batch_id: str | None = None
+    document_source: Literal["SEEDED_BENCHMARK_BATCH", "UPLOADED_JSON_PDF"]
+    raw_payload: dict[str, Any] | None = None
+
+
+class BatchAuditRequest(ApiModel):
+    tenant_id: str = Field(min_length=1, max_length=64)
+    invoices: list[dict[str, Any]]
+    offline_deterministic: bool = True
+
+
+class BatchAuditResponse(ApiModel):
+    batch_id: str
+    results: list[InvoiceRecord]
+    audit_envelope_hashes: list[str]
+
+
+class OptimizeRequest(ApiModel):
+    tenant_id: str = Field(min_length=1, max_length=64)
+    verified_invoice_ids: list[str] = Field(default_factory=list)
+    horizon_days: int = Field(default=30, ge=1, le=365)
+    min_payroll_reserve: Decimal = Decimal("50000.00")
+
+    _floor = field_validator("min_payroll_reserve", mode="before")(staticmethod(to_money))
+
+
+class OptimizeResponse(ApiModel):
+    schedule: list[StagedPaymentPlan]
+    daily_cash_trajectory: list[DailyCashPoint]
+    selected_financing: dict[str, Any] | None = None
+    net_savings: Decimal
+
+    _savings = field_validator("net_savings", mode="before")(staticmethod(to_money))
+
+
+class ForensicDecisionEnvelope(ApiModel):
+    envelope_version: Literal["1.0.0"] = "1.0.0"
+    trace_id: str
+    timestamp_utc: str
+    previous_envelope_hash: str
+    current_envelope_hash: str
+    input_document_sha256: str
+    actor_identity: str
+    permission_tier: PermissionTierLabel
+    opa_policy_verdict: Literal[
+        "ALLOW",
+        "ALLOW_WITH_VALID_HUMAN_SIGNATURE",
+        "DENY_SECURITY_POLICY",
+        "DENY_DISCREPANCY",
+    ]
+    three_way_match_summary: dict[str, Any] = Field(default_factory=dict)
+    working_capital_optimization_summary: dict[str, Any] = Field(default_factory=dict)
+    sandbox_execution_verification: dict[str, Any] = Field(default_factory=dict)
+
+
+class VerifyChainResponse(ApiModel):
+    # Frontend contract (apiClient.ts) names:
+    valid: bool
+    envelopes_checked: int
+    genesis_hash: str
+    latest_hash: str
+    tamper_detected_at_trace_id: str | None
+    message: str
+    # Written-contract aliases (same values, kept for the typed API table):
+    chain_valid: bool
+    envelopes_verified: int
+    head_hash: str
+    broken_at_trace_id: str | None
+
+
+class ErrorEnvelope(ApiModel):
+    error_code: str
+    message: str
+    severity: Literal["WARNING", "ERROR", "CRITICAL_SECURITY"]
+    trace_id: str
+    violated_policy_rule: str | None = None
+    suggested_operator_action: str
+    recoverable: bool
 

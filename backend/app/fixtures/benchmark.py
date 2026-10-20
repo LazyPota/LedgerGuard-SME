@@ -323,3 +323,62 @@ INVOICE_DOCUMENTS: list[RawInvoiceDocument] = [
 
 def extract_fixture(document: RawInvoiceDocument) -> ExtractionOutcome:
     return extract_invoice(document, offline_deterministic=True)
+
+
+# --- Cash, payroll and facilities (mirrors INITIAL_TREASURY_SUMMARY) -------
+from datetime import date  # noqa: E402
+
+from backend.app.engine.working_capital import CashEvent  # noqa: E402
+
+START_DATE = date(2026, 11, 1)
+STARTING_CASH = "77200.00"
+PAYROLL_FLOOR = "50000.00"
+PAYROLL_DATE = "2026-11-15"
+PAYROLL_AMOUNT = "39200.00"
+
+CASH_INFLOWS = (
+    CashEvent(day=3, amount="5000.00", label="AR inflow"),
+    CashEvent(day=22, amount="35000.00", label="AR inflow"),
+    CashEvent(day=26, amount="2000.00", label="AR inflow"),
+)
+CASH_OUTFLOWS = (
+    CashEvent(day=3, amount="2000.00", label="Operating"),
+    CashEvent(day=15, amount="39200.00", label="Payroll"),
+    CashEvent(day=30, amount="1800.00", label="Month-end"),
+)
+
+CREDIT_FACILITIES = (
+    {
+        "facility_id": "LOC-WEBANK-SME-01",
+        "facility_type": "REVOLVING_LOC",
+        "name": "WeBank SME Liquidity Line (Revolving Credit)",
+        "facility_limit": "100000.00",
+        "current_drawn": "35000.00",
+        "annual_rate": "0.1050",
+        "origination_fee_pct": "0.0000",
+        "min_current_ratio": "1.2500",
+        "current_ratio": "1.4200",
+    },
+    {
+        "facility_id": "SCF-PAYABLE-02",
+        "facility_type": "DYNAMIC_DISCOUNTING_SCF",
+        "name": "Dynamic Supply Chain Payable Facility",
+        "facility_limit": "50000.00",
+        "current_drawn": "15000.00",
+        "annual_rate": "0.1280",
+        "origination_fee_pct": "0.0025",
+        "min_current_ratio": "1.2000",
+        "current_ratio": "1.4200",
+    },
+    {
+        "facility_id": "STL-WORKING-CAP-03",
+        "facility_type": "SHORT_TERM_LOAN",
+        "name": "Short-Term Fixed Working Capital Facility",
+        "facility_limit": "75000.00",
+        "current_drawn": "25000.00",
+        "annual_rate": "0.1400",
+        "origination_fee_pct": "0.0100",
+        "min_current_ratio": "1.3000",
+        "current_ratio": "1.4200",
+    },
+)
