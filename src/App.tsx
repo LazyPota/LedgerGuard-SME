@@ -7,10 +7,10 @@ import {
   InvoiceRecord,
   TreasurySummaryResponse,
   ExecutionReceipt,
+  ForensicDecisionEnvelope,
   ApiErrorEnvelope,
 } from './contracts/ledgerGuardContract';
 import { CurrencyDisplay } from './components/common/CurrencyDisplay';
-import { Card } from './components/common/Card';
 import { OverviewDashboardView } from './components/views/OverviewDashboardView';
 import { InvoiceIntakeListView } from './components/views/InvoiceIntakeListView';
 import { InvoiceDetailDrawer } from './components/views/InvoiceDetailDrawer';
@@ -18,13 +18,18 @@ import { ThreeWayMatchMatrixView } from './components/views/ThreeWayMatchMatrixV
 import { DiscrepancyReviewView } from './components/views/DiscrepancyReviewView';
 import { LiquidityExplanationView } from './components/views/LiquidityExplanationView';
 import { ApprovalQueueView } from './components/views/ApprovalQueueView';
-import { ShieldCheck, ArrowRight } from 'lucide-react';
+import { ExecutionHistoryView } from './components/views/ExecutionHistoryView';
+import { ForensicAuditTrailView } from './components/views/ForensicAuditTrailView';
+import { SecurityDiagnosticsView } from './components/views/SecurityDiagnosticsView';
+import { ShieldCheck } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [activeView, setActiveView] = useState<ActiveViewId>('overview');
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [treasury, setTreasury] = useState<TreasurySummaryResponse | null>(null);
   const [executions, setExecutions] = useState<ExecutionReceipt[]>([]);
+  const [envelopes, setEnvelopes] = useState<ForensicDecisionEnvelope[]>([]);
+  const [targetAuditTraceId, setTargetAuditTraceId] = useState<string | undefined>(undefined);
   const [activeError, setActiveError] = useState<ApiErrorEnvelope | null>(null);
   const [_isLoading, setIsLoading] = useState<boolean>(true);
   const [isResetting, setIsResetting] = useState<boolean>(false);
@@ -40,14 +45,16 @@ export const App: React.FC = () => {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [invData, trsData, execData] = await Promise.all([
+      const [invData, trsData, execData, envData] = await Promise.all([
         apiClient.getInvoices(),
         apiClient.getTreasurySummary(),
         apiClient.getExecutions(),
+        apiClient.getAuditEnvelopes(),
       ]);
       setInvoices(invData);
       setTreasury(trsData);
       setExecutions(execData);
+      setEnvelopes(envData);
       if (invData.length > 0 && !selectedMatchInvoiceId) {
         setSelectedMatchInvoiceId(invData[0].invoice_id);
       }
@@ -123,6 +130,17 @@ export const App: React.FC = () => {
 
   const handleNavigateToApproval = (_invoiceId: string) => {
     setActiveView('approval');
+    setIsDrawerOpen(false);
+  };
+
+  const handleNavigateToAudit = (traceId?: string) => {
+    setTargetAuditTraceId(traceId);
+    setActiveView('audit');
+    setIsDrawerOpen(false);
+  };
+
+  const handleNavigateToExecutions = () => {
+    setActiveView('executions');
     setIsDrawerOpen(false);
   };
 
@@ -266,43 +284,37 @@ export const App: React.FC = () => {
             />
           )}
 
-          {/* Placeholder Views for Stage 6 */}
-          {activeView !== 'overview' &&
-            activeView !== 'intake' &&
-            activeView !== 'three_way_match' &&
-            activeView !== 'discrepancy' &&
-            activeView !== 'liquidity' &&
-            activeView !== 'approval' && (
-              <Card
-                title={`Stage 6 View: ${activeView.toUpperCase()}`}
-                subtitle="Scheduled for final implementation in Stage 6"
-              >
-                <div className="p-8 text-center space-y-3 font-mono text-xs text-slate-400">
-                  <p>
-                    Component view scheduled for Stage 6: <strong>{activeView}</strong>.
-                  </p>
-                  <p className="text-[11px] text-slate-500 font-sans">
-                    Stage 5 successfully delivers View 4 (Discrepancy Review), View 5 (Liquidity Explanation), and View 6 (Approval Controls).
-                  </p>
-                  <div className="pt-2">
-                    <button
-                      onClick={() => setActiveView('overview')}
-                      className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold inline-flex items-center gap-1.5"
-                    >
-                      <span>Return to Overview Dashboard</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </Card>
-            )}
+          {activeView === 'executions' && (
+            <ExecutionHistoryView
+              executions={executions}
+              onNavigateToAudit={handleNavigateToAudit}
+              onRefreshData={loadData}
+            />
+          )}
+
+          {activeView === 'audit' && (
+            <ForensicAuditTrailView
+              envelopes={envelopes}
+              executions={executions}
+              targetTraceId={targetAuditTraceId}
+            />
+          )}
+
+          {activeView === 'security_diagnostics' && (
+            <SecurityDiagnosticsView
+              invoices={invoices}
+              onRefreshData={loadData}
+              onNavigateToAudit={handleNavigateToAudit}
+              onNavigateToExecutions={handleNavigateToExecutions}
+            />
+          )}
 
           {/* Architectural Security Notice Banner */}
           <div className="p-4 rounded-lg bg-slate-900 border border-slate-800 flex items-start gap-3 text-xs text-slate-400">
             <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
             <div>
-              <span className="font-semibold text-slate-200">Stage 5 Risk Review & Approval Controls Active. </span>
-              Zero Frontend Financial Arithmetic strictly applied. Tabular-nums formatted. OWASP ASI01 sandboxed field containers and anti-rubber-stamp confirmation gates enforced.
+              <span className="font-semibold text-slate-200">LedgerGuard-SME Production Copilot Engine Active. </span>
+              Zero Frontend Financial Arithmetic strictly applied. Tabular-nums formatted. OWASP ASI01 sandboxed field containers, anti-rubber-stamp confirmation gates, and SHA-256 cryptographic non-repudiation audit trail verified.
             </div>
           </div>
         </main>
