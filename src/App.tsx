@@ -10,10 +10,12 @@ import {
   ApiErrorEnvelope,
 } from './contracts/ledgerGuardContract';
 import { CurrencyDisplay } from './components/common/CurrencyDisplay';
-import { OperationalStateBadge } from './components/common/OperationalStateBadge';
-import { PermissionTierBadge } from './components/common/PermissionTierBadge';
 import { Card } from './components/common/Card';
-import { ShieldCheck } from 'lucide-react';
+import { OverviewDashboardView } from './components/views/OverviewDashboardView';
+import { InvoiceIntakeListView } from './components/views/InvoiceIntakeListView';
+import { InvoiceDetailDrawer } from './components/views/InvoiceDetailDrawer';
+import { ThreeWayMatchMatrixView } from './components/views/ThreeWayMatchMatrixView';
+import { ShieldCheck, ArrowRight } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [activeView, setActiveView] = useState<ActiveViewId>('overview');
@@ -21,8 +23,16 @@ export const App: React.FC = () => {
   const [treasury, setTreasury] = useState<TreasurySummaryResponse | null>(null);
   const [executions, setExecutions] = useState<ExecutionReceipt[]>([]);
   const [activeError, setActiveError] = useState<ApiErrorEnvelope | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [_isLoading, setIsLoading] = useState<boolean>(true);
   const [isResetting, setIsResetting] = useState<boolean>(false);
+  const [isIngesting, setIsIngesting] = useState<boolean>(false);
+
+  // Inspector Drawer State
+  const [inspectedInvoice, setInspectedInvoice] = useState<InvoiceRecord | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
+
+  // 3-Way Match Selected Invoice
+  const [selectedMatchInvoiceId, setSelectedMatchInvoiceId] = useState<string | undefined>(undefined);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -35,12 +45,15 @@ export const App: React.FC = () => {
       setInvoices(invData);
       setTreasury(trsData);
       setExecutions(execData);
+      if (invData.length > 0 && !selectedMatchInvoiceId) {
+        setSelectedMatchInvoiceId(invData[0].invoice_id);
+      }
     } catch (err) {
       setActiveError(apiClient.normalizeError(err));
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [selectedMatchInvoiceId]);
 
   useEffect(() => {
     loadData();
@@ -61,6 +74,53 @@ export const App: React.FC = () => {
     } finally {
       setIsResetting(false);
     }
+  };
+
+  const handleIngestBatch = async () => {
+    setIsIngesting(true);
+    try {
+      await apiClient.ingestBenchmarkBatch();
+      await loadData();
+    } catch (err) {
+      setActiveError(apiClient.normalizeError(err));
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
+  const handleIngestCustom = async (payload: any) => {
+    try {
+      const newInv = await apiClient.ingestCustomInvoice({
+        document_source: 'UPLOADED_JSON_PDF',
+        raw_payload: payload,
+      });
+      await loadData();
+      setInspectedInvoice(newInv);
+      setIsDrawerOpen(true);
+    } catch (err) {
+      setActiveError(apiClient.normalizeError(err));
+    }
+  };
+
+  const handleInspectInvoice = (inv: InvoiceRecord) => {
+    setInspectedInvoice(inv);
+    setIsDrawerOpen(true);
+  };
+
+  const handleNavigateTo3WayMatch = (invoiceId: string) => {
+    setSelectedMatchInvoiceId(invoiceId);
+    setActiveView('three_way_match');
+    setIsDrawerOpen(false);
+  };
+
+  const handleNavigateToDiscrepancy = (_invoiceId: string) => {
+    setActiveView('discrepancy');
+    setIsDrawerOpen(false);
+  };
+
+  const handleNavigateToApproval = (_invoiceId: string) => {
+    setActiveView('approval');
+    setIsDrawerOpen(false);
   };
 
   // Derive counts for sidebar badges
@@ -105,7 +165,7 @@ export const App: React.FC = () => {
           className="flex-1 overflow-y-auto p-6 lg:p-8 space-y-6"
           data-testid="main-content-viewport"
         >
-          {/* Top Operational Context Bar */}
+          {/* Top Operational Context Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-800 gap-3">
             <div>
               <div className="flex items-center gap-2">
@@ -149,127 +209,84 @@ export const App: React.FC = () => {
             )}
           </div>
 
-          {/* Quick-Summary KPI Cards (Always visible in Stage 3 shell) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="border-l-4 border-l-emerald-500">
-              <span className="text-[11px] font-mono uppercase text-slate-400 tracking-wider">
-                Operating Cash Balance
-              </span>
-              <div className="mt-1 text-2xl font-bold font-mono">
-                <CurrencyDisplay amount={treasury?.current_cash_balance || '0.00'} />
-              </div>
-              <p className="mt-1 text-[11px] text-slate-400">
-                Floor: <span className="text-amber-400 font-mono font-semibold">${treasury?.payroll_reserve_floor || '50,000.00'}</span> (Hard Constraint)
-              </p>
-            </Card>
+          {/* View Routing */}
+          {activeView === 'overview' && (
+            <OverviewDashboardView
+              treasury={treasury}
+              invoices={invoices}
+              onNavigate={setActiveView}
+            />
+          )}
 
-            <Card className="border-l-4 border-l-indigo-500">
-              <span className="text-[11px] font-mono uppercase text-slate-400 tracking-wider">
-                Verified Payables (30d)
-              </span>
-              <div className="mt-1 text-2xl font-bold font-mono text-indigo-300">
-                <CurrencyDisplay amount={treasury?.total_verified_payables_30d || '0.00'} />
-              </div>
-              <p className="mt-1 text-[11px] text-slate-400">
-                2 verified matched invoices (TC-01, TC-05)
-              </p>
-            </Card>
+          {activeView === 'intake' && (
+            <InvoiceIntakeListView
+              invoices={invoices}
+              onSelectInvoice={handleInspectInvoice}
+              onNavigateTo3WayMatch={handleNavigateTo3WayMatch}
+              onIngestBatch={handleIngestBatch}
+              onIngestCustom={handleIngestCustom}
+              isIngesting={isIngesting}
+            />
+          )}
 
-            <Card className="border-l-4 border-l-amber-500">
-              <span className="text-[11px] font-mono uppercase text-slate-400 tracking-wider">
-                Quarantined Payables
-              </span>
-              <div className="mt-1 text-2xl font-bold font-mono text-amber-300">
-                <CurrencyDisplay amount={treasury?.total_quarantined_payables || '0.00'} />
-              </div>
-              <p className="mt-1 text-[11px] text-slate-400">
-                {quarantinedCount} discrepancy + {securityBlockedCount} security violation
-              </p>
-            </Card>
+          {activeView === 'three_way_match' && (
+            <ThreeWayMatchMatrixView
+              invoices={invoices}
+              selectedInvoiceId={selectedMatchInvoiceId}
+              onSelectInvoiceId={setSelectedMatchInvoiceId}
+              onNavigateToDiscrepancy={handleNavigateToDiscrepancy}
+              onNavigateToApproval={handleNavigateToApproval}
+            />
+          )}
 
-            <Card className="border-l-4 border-l-emerald-400">
-              <span className="text-[11px] font-mono uppercase text-slate-400 tracking-wider">
-                Net Early-Pay Arbitrage
-              </span>
-              <div className="mt-1 text-2xl font-bold font-mono text-emerald-400">
-                <CurrencyDisplay
-                  amount={treasury?.net_30d_discount_savings_available || '0.00'}
-                  isDelta={true}
-                />
-              </div>
-              <p className="mt-1 text-[11px] text-slate-400">
-                $800 discount - $24.16 LOC bridge cost
-              </p>
-            </Card>
-          </div>
-
-          {/* Shell Stage View Preview / Invoices Table Preview */}
-          <Card
-            title={`Active Invoices (${invoices.length} Loaded)`}
-            subtitle="Demonstrating strict operational state honesty and permission tiers"
-          >
-            {isLoading ? (
-              <div className="py-8 text-center text-xs text-slate-400 font-mono animate-pulse">
-                Loading deterministic SME fixtures...
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs" data-testid="invoices-preview-table">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-slate-400 font-mono uppercase text-[11px]">
-                      <th className="py-2.5 px-3">Invoice</th>
-                      <th className="py-2.5 px-3">Vendor</th>
-                      <th className="py-2.5 px-3 text-right">Amount</th>
-                      <th className="py-2.5 px-3">Terms</th>
-                      <th className="py-2.5 px-3">Operational State</th>
-                      <th className="py-2.5 px-3">Permission Tier</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-850">
-                    {invoices.map((inv) => (
-                      <tr
-                        key={inv.invoice_id}
-                        className="hover:bg-slate-850/50 transition-colors font-sans"
-                        data-testid={`invoice-row-${inv.invoice_number}`}
-                      >
-                        <td className="py-3 px-3 font-mono font-medium text-slate-200">
-                          {inv.invoice_number}
-                        </td>
-                        <td className="py-3 px-3 text-slate-300">
-                          {inv.extraction.vendor_name_claimed}
-                        </td>
-                        <td className="py-3 px-3 text-right">
-                          <CurrencyDisplay amount={inv.extraction.total_claimed} />
-                        </td>
-                        <td className="py-3 px-3 font-mono text-slate-400">
-                          {inv.extraction.early_discount_pct !== '0.00'
-                            ? `${inv.extraction.early_discount_pct}% ${inv.extraction.early_discount_days} Net ${inv.extraction.net_due_days}`
-                            : `Net ${inv.extraction.net_due_days}`}
-                        </td>
-                        <td className="py-3 px-3">
-                          <OperationalStateBadge state={inv.operational_state} size="sm" />
-                        </td>
-                        <td className="py-3 px-3">
-                          <PermissionTierBadge tier={inv.permission_tier} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+          {/* Placeholder Views for Stages 5 and 6 */}
+          {activeView !== 'overview' &&
+            activeView !== 'intake' &&
+            activeView !== 'three_way_match' && (
+              <Card
+                title={`Stage 5/6 View: ${activeView.toUpperCase()}`}
+                subtitle="Scheduled for complete feature implementation in Stages 5 and 6"
+              >
+                <div className="p-8 text-center space-y-3 font-mono text-xs text-slate-400">
+                  <p>
+                    Component view scheduled for implementation: <strong>{activeView}</strong>.
+                  </p>
+                  <p className="text-[11px] text-slate-500 font-sans">
+                    Stage 4 successfully delivers View 1 (Overview Dashboard), View 2 (Invoice Intake), and View 3 (Three-Way Match Matrix).
+                  </p>
+                  <div className="pt-2">
+                    <button
+                      onClick={() => setActiveView('overview')}
+                      className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold inline-flex items-center gap-1.5"
+                    >
+                      <span>Return to Overview Dashboard</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </Card>
             )}
-          </Card>
 
           {/* Architectural Security Notice Banner */}
           <div className="p-4 rounded-lg bg-slate-900 border border-slate-800 flex items-start gap-3 text-xs text-slate-400">
             <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
             <div>
-              <span className="font-semibold text-slate-200">Stage 3 Design System & Application Shell Active. </span>
-              Zero Frontend Financial Arithmetic strictly applied. Tabular-nums formatted. OWASP ASI01 sandboxed field containers and anti-rubber-stamp confirmation gates established for Stages 4–6.
+              <span className="font-semibold text-slate-200">Stage 4 Dashboard & Matching Active. </span>
+              Zero Frontend Financial Arithmetic strictly applied. Tabular-nums formatted. OWASP ASI01 sandboxed field containers and anti-rubber-stamp confirmation gates established.
             </div>
           </div>
         </main>
       </div>
+
+      {/* Invoice Detail Inspector Drawer */}
+      <InvoiceDetailDrawer
+        invoice={inspectedInvoice}
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        onNavigateTo3WayMatch={handleNavigateTo3WayMatch}
+        onNavigateToDiscrepancy={handleNavigateToDiscrepancy}
+        onNavigateToApproval={handleNavigateToApproval}
+      />
     </div>
   );
 };
