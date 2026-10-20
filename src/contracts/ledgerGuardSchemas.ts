@@ -69,8 +69,8 @@ export const CreditFacilityRecordSchema = z.object({
   current_ratio_actual: z.string(),
   covenant_compliant: z.boolean(),
   recommended_by_optimizer: z.boolean(),
-  covenant_dscr_min: z.string().optional(),
-  dscr_actual: z.string().optional(),
+  covenant_dscr_min: z.string().nullish(),
+  dscr_actual: z.string().nullish(),
 });
 
 export const TreasurySummaryResponseSchema = z.object({
@@ -130,7 +130,7 @@ export const DiscrepancyFindingSchema = z.object({
     'LOW_LEXICAL_OVERLAP',
   ]),
   severity: z.enum(['WARNING', 'HIGH', 'CRITICAL']),
-  line_sku: z.string().optional(),
+  line_sku: z.string().nullish(),
   expected_value: z.string(),
   actual_value: z.string(),
   financial_impact_delta: z.string(),
@@ -299,4 +299,17 @@ export const ApiErrorEnvelopeSchema = z.object({
   violated_policy_rule: z.string().optional(),
   suggested_operator_action: z.string(),
   recoverable: z.boolean(),
+});
+
+export const VerifyChainResponseSchema = z.object({
+  valid: z.boolean(),
+  envelopes_checked: z.number(),
+  genesis_hash: z.string(),
+  latest_hash: z.string(),
+  tamper_detected_at_trace_id: z.string().nullable(),
+  message: z.string(),
+  chain_valid: z.boolean().optional(),
+  envelopes_verified: z.number().optional(),
+  head_hash: z.string().optional(),
+  broken_at_trace_id: z.string().nullable().optional(),
 });

@@ -16,4 +16,6 @@ dist/
 # Secrets / local state
 .env
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3

@@ -167,7 +167,28 @@ export class ApiClient {
         body: JSON.stringify(req),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.json();
+      const decisionRes = await res.json();
+
+      if (decisionRes.approval_status === 'APPROVED' && decisionRes.approval_token) {
+        const execRes = await fetch(`${this.baseUrl}/execution/run`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Idempotency-Key': req.idempotency_key,
+          },
+          body: JSON.stringify({
+            action_id: req.approval_id,
+            idempotency_key: req.idempotency_key,
+            approval_token: decisionRes.approval_token,
+          }),
+        });
+        if (execRes.ok) {
+          const receipt = await execRes.json();
+          return { status: 'APPROVED', receipt };
+        }
+      }
+
+      return { status: decisionRes.approval_status || 'APPROVED' };
     } catch {
       return mockSandboxAdapter.submitApprovalDecision(req);
     }

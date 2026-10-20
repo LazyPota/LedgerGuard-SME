@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.api import (
     routes_approvals,
@@ -19,6 +20,14 @@ app = FastAPI(
         "Deterministic, auditable SME finance copilot backend. "
         "All financial arithmetic is Decimal-based; AI is confined to extraction."
     ),
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 for router in (
