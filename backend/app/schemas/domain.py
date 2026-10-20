@@ -149,6 +149,8 @@ class PurchaseOrder(StrictModel):
     po_id: str = Field(min_length=1, max_length=64)
     vendor_id: str = Field(min_length=1, max_length=64)
     currency: str = Field(min_length=3, max_length=3)
+    order_date: str = Field(default="1970-01-01", pattern=r"^\d{4}-\d{2}-\d{2}$")
+    status: str = Field(default="OPEN_CONFIRMED", max_length=32)
     price_tolerance: Rate = Decimal("0.0000")
     lines: list[PurchaseOrderLine] = Field(min_length=1)
 
@@ -185,6 +187,8 @@ class GRNLine(StrictModel):
 class GoodsReceiptNote(StrictModel):
     grn_id: str = Field(min_length=1, max_length=64)
     po_id: str = Field(min_length=1, max_length=64)
+    received_date: str = Field(default="1970-01-01", pattern=r"^\d{4}-\d{2}-\d{2}$")
+    warehouse_verified_by: str = Field(default="", max_length=200)
     lines: list[GRNLine] = Field(min_length=1)
 
     @property

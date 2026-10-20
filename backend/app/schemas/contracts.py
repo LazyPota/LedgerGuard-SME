@@ -134,3 +134,108 @@ class ExtractionOutcome(ApiModel):
     security_findings: list[SecurityFinding] = Field(default_factory=list)
     extractor_mode: Literal["DETERMINISTIC_FIXTURE_REPLAY", "LIVE_STRUCTURED_OUTPUT"]
 
+
+# --- 3-way match contracts (mirror ledgerGuardContract.ts) -----------------
+
+
+class POLineItem(ApiModel):
+    sku: str
+    description: str
+    unit_of_measure: str
+    quantity_ordered: Decimal
+    unit_price_contracted: Decimal
+    line_total: Decimal
+
+    _dec = field_validator(
+        "quantity_ordered", "unit_price_contracted", "line_total", mode="before"
+    )(staticmethod(to_decimal_raw))
+    _money = field_validator(
+        "unit_price_contracted", "line_total", mode="before"
+    )(staticmethod(to_money))
+
+
+class PurchaseOrderRecord(ApiModel):
+    po_id: str
+    vendor_id: str
+    order_date: str
+    status: str
+    line_items: list[POLineItem]
+
+
+class GRNLineItem(ApiModel):
+    sku: str
+    quantity_received: Decimal
+    quantity_accepted: Decimal
+    condition_notes: str = ""
+
+    _dec = field_validator(
+        "quantity_received", "quantity_accepted", mode="before"
+    )(staticmethod(to_decimal_raw))
+
+
+class GoodsReceiptNoteRecord(ApiModel):
+    grn_id: str
+    po_id: str
+    received_date: str
+    warehouse_verified_by: str
+    line_items: list[GRNLineItem]
+
+
+class VendorMasterCheck(ApiModel):
+    vendor_id: str
+    legal_name: str
+    approved_iban_masked: str
+    iban_exact_match: bool
+    bank_change_requested_in_invoice: bool
+
+
+DiscrepancyCode = Literal[
+    "QUANTITY_EXCEEDS_GRN",
+    "PRICE_EXCEEDS_PO",
+    "MATH_EXTENSION_ERROR",
+    "DUPLICATE_INVOICE_HASH",
+    "MISSING_GRN",
+    "LOW_LEXICAL_OVERLAP",
+]
+
+
+class DiscrepancyFinding(ApiModel):
+    code: DiscrepancyCode
+    severity: Literal["WARNING", "HIGH", "CRITICAL"]
+    line_sku: str | None = None
+    expected_value: str
+    actual_value: str
+    financial_impact_delta: Decimal
+    explanation: str
+
+    _delta = field_validator("financial_impact_delta", mode="before")(staticmethod(to_money))
+
+
+MatchStatus = Literal[
+    "VERIFIED_ELIGIBLE",
+    "QUARANTINED_DISCREPANCY",
+    "PENDING_GRN_ATTESTATION",
+    "BLOCKED_SECURITY_VIOLATION",
+]
+
+
+class ReconciliationFindings(ApiModel):
+    overall_match_status: MatchStatus
+    math_reconciled: bool
+    computed_subtotal: Decimal
+    computed_tax: Decimal
+    computed_total: Decimal
+    discrepancies: list[DiscrepancyFinding] = Field(default_factory=list)
+    security_flags: list[SecurityFinding] = Field(default_factory=list)
+
+    _money = field_validator(
+        "computed_subtotal", "computed_tax", "computed_total", mode="before"
+    )(staticmethod(to_money))
+
+
+class ThreeWayMatchRecord(ApiModel):
+    purchase_order: PurchaseOrderRecord | None
+    goods_receipt_note: GoodsReceiptNoteRecord | None
+    vendor_master_check: VendorMasterCheck
+    reconciliation_findings: ReconciliationFindings
+
