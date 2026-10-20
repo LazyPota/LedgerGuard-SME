@@ -1,0 +1,28 @@
+{
+  "generated_at_utc": "2026-10-20T11:15:38.945886+00:00",
+  "environment": {
+    "python": "3.14.8",
+    "platform": "Windows-11-10.0.26300-SP0"
+  },
+  "three_way_reconciliation": {
+    "iterations": 50,
+    "mean_ms": 0.0848,
+    "p50_ms": 0.0803,
+    "p95_ms": 0.099,
+    "peak_memory_kb": 11.09
+  },
+  "cash_flow_projection_30d": {
+    "iterations": 100,
+    "mean_ms": 1.561,
+    "p50_ms": 1.4153,
+    "p95_ms": 2.0729,
+    "peak_memory_kb": 61.55
+  },
+  "liquidity_evaluation": {
+    "iterations": 50,
+    "mean_ms": 5.299,
+    "p50_ms": 5.103,
+    "p95_ms": 6.2864,
+    "peak_memory_kb": 184.8
+  }
+}
